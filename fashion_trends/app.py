@@ -13,7 +13,7 @@ from PIL import Image
 # PATHS (robustos p/ Streamlit Cloud)
 # =====================
 BASE_DIR = Path(__file__).resolve().parent  # pasta do app.py (fashion_trends/)
-MODEL_PATH = BASE_DIR / "model" / "model.keras"
+SAVEDMODEL_DIR = BASE_DIR / "model_saved"  # pasta com saved_model.pb e variables/
 LABELS_PATH = BASE_DIR / "model" / "labels_runtime.json"
 SPLITS_CSV = BASE_DIR / "data" / "splits.csv"
 
@@ -153,8 +153,17 @@ def inject_dark_blue_theme():
 # LOADERS
 # =====================
 @st.cache_resource
-def load_model():
-    return tf.keras.models.load_model(str(MODEL_PATH))
+def load_infer_fn():
+    """
+    Carrega um SavedModel (mais robusto para deploy).
+    Retorna a assinatura de inferência "serving_default".
+    """
+    sm = tf.saved_model.load(str(SAVEDMODEL_DIR))
+    if "serving_default" not in sm.signatures:
+        # fallback: pega a primeira assinatura existente
+        first_key = list(sm.signatures.keys())[0]
+        return sm.signatures[first_key]
+    return sm.signatures["serving_default"]
 
 @st.cache_data
 def load_labels():
@@ -229,12 +238,35 @@ def preprocess_image(pil_img, img_size: int):
     return rgb.astype(np.float32), rgb.astype(np.uint8)
 
 # =====================
-# PREDICTION
+# PREDICTION (SavedModel)
 # =====================
-def predict(model, img_0_255):
+def predict(infer_fn, img_0_255):
+    """
+    infer_fn: assinatura do SavedModel
+    img_0_255: float32 [H,W,3] 0..255
+    Retorna: (macro_probs, style_probs)
+    """
     x = np.expand_dims(img_0_255, 0).astype(np.float32)
-    macro_p, style_p = model.predict(x, verbose=0)
-    return macro_p[0], style_p[0]
+    out = infer_fn(tf.convert_to_tensor(x))
+
+    # SavedModel geralmente retorna dict {output_name: tensor}
+    if isinstance(out, dict):
+        keys = list(out.keys())
+        vals = [out[k] for k in keys]
+    else:
+        # caso raro
+        vals = list(out)
+
+    # Esperamos duas saídas (macro e style)
+    if len(vals) < 2:
+        raise RuntimeError(
+            f"Saída inesperada do SavedModel. "
+            f"Esperava 2 tensores (macro, style), recebi {len(vals)}."
+        )
+
+    macro_p = vals[0].numpy()[0]
+    style_p = vals[1].numpy()[0]
+    return macro_p, style_p
 
 def tr_macro(name: str) -> str:
     return MACRO_PT.get(name, name)
@@ -252,8 +284,13 @@ st.title("👕 Classificador de Outfit (Macro + Subclasse)")
 st.caption("Upload de uma foto de outfit completo. O modelo retorna Estilo Principal (Macro) + Subestilo (Subclasse) e mostra evidências semânticas (tags do dataset).")
 
 # Checagens básicas
-if not MODEL_PATH.exists():
-    st.error(f"Modelo não encontrado em: {MODEL_PATH}")
+if not SAVEDMODEL_DIR.exists():
+    st.error(f"SavedModel não encontrado em: {SAVEDMODEL_DIR}")
+    st.info("Você precisa subir a pasta model_saved/ (saved_model.pb + variables/) no repo.")
+    st.stop()
+
+if not (SAVEDMODEL_DIR / "saved_model.pb").exists():
+    st.error(f"Arquivo saved_model.pb não encontrado em: {SAVEDMODEL_DIR / 'saved_model.pb'}")
     st.stop()
 
 if not LABELS_PATH.exists():
@@ -263,7 +300,7 @@ if not LABELS_PATH.exists():
 if not SPLITS_CSV.exists():
     st.warning(f"Não achei {SPLITS_CSV}. Vou rodar sem as tags típicas (explicação semântica).")
 
-model = load_model()
+infer_fn = load_infer_fn()
 labels = load_labels()
 
 IMG_SIZE = int(labels.get("img_size", 192))
@@ -287,7 +324,7 @@ if file:
     st.subheader("Imagem analisada (preprocess OpenCV)")
     st.image(img_u8, width="stretch")
 
-    macro_p, style_p = predict(model, img_f)
+    macro_p, style_p = predict(infer_fn, img_f)
 
     # Macro
     macro_id = int(np.argmax(macro_p))
