@@ -135,4 +135,8 @@ evitando contradições semânticas.
 
 Além da predição visual, o sistema apresenta evidências semânticas
 (tags mais frequentes no dataset para aquela classe),
+<<<<<<< HEAD
 aumentando a interpretabilidade do resultado.
+=======
+aumentando a interpretabilidade do resultado.
+>>>>>>> 0f9fe2f (Fix deploy)
