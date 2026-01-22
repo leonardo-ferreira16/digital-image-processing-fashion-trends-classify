@@ -1,0 +1,24 @@
+{
+  "img_size": 192,
+  "batch_size": 6,
+  "macro_names": [
+    "CASUAL_BASICO",
+    "CHIC_ROMANTIC",
+    "EXPRESSIVE",
+    "TRENDY_ECLECTIC"
+  ],
+  "style_names": [
+    "basic",
+    "bohemian",
+    "casual",
+    "chic",
+    "classic",
+    "comfortable",
+    "eclectic",
+    "elegant",
+    "rocker",
+    "romantic",
+    "trendy",
+    "urban"
+  ]
+}
