@@ -1,5 +1,7 @@
 import os
 import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import cv2
@@ -8,11 +10,12 @@ import streamlit as st
 from PIL import Image
 
 # =====================
-# PATHS
+# PATHS (robustos p/ Streamlit Cloud)
 # =====================
-MODEL_PATH = os.path.join("model", "model.keras")
-LABELS_PATH = os.path.join("model", "labels_runtime.json")
-SPLITS_CSV  = os.path.join("data", "splits.csv")
+BASE_DIR = Path(__file__).resolve().parent  # pasta do app.py (fashion_trends/)
+MODEL_PATH = BASE_DIR / "model" / "model.keras"
+LABELS_PATH = BASE_DIR / "model" / "labels_runtime.json"
+SPLITS_CSV = BASE_DIR / "data" / "splits.csv"
 
 # =====================
 # MAPA subclasse -> macro
@@ -93,7 +96,7 @@ def tr_tag(t: str) -> str:
     return TAG_PT.get(t, t)
 
 # =====================
-# THEME 
+# THEME
 # =====================
 def inject_dark_blue_theme():
     st.markdown("""
@@ -151,7 +154,7 @@ def inject_dark_blue_theme():
 # =====================
 @st.cache_resource
 def load_model():
-    return tf.keras.models.load_model(MODEL_PATH)
+    return tf.keras.models.load_model(str(MODEL_PATH))
 
 @st.cache_data
 def load_labels():
@@ -220,7 +223,7 @@ def preprocess_image(pil_img, img_size: int):
     rgb = rgb[y1:y2, x1:x2]
     rgb = cv2.resize(rgb, (img_size, img_size), interpolation=cv2.INTER_AREA)
 
-    # ajuste leve 
+    # ajuste leve
     rgb = cv2.convertScaleAbs(rgb, alpha=1.05, beta=2)
 
     return rgb.astype(np.float32), rgb.astype(np.uint8)
@@ -249,15 +252,15 @@ st.title("👕 Classificador de Outfit (Macro + Subclasse)")
 st.caption("Upload de uma foto de outfit completo. O modelo retorna Estilo Principal (Macro) + Subestilo (Subclasse) e mostra evidências semânticas (tags do dataset).")
 
 # Checagens básicas
-if not os.path.exists(MODEL_PATH):
+if not MODEL_PATH.exists():
     st.error(f"Modelo não encontrado em: {MODEL_PATH}")
     st.stop()
 
-if not os.path.exists(LABELS_PATH):
+if not LABELS_PATH.exists():
     st.error(f"Arquivo de labels não encontrado em: {LABELS_PATH}")
     st.stop()
 
-if not os.path.exists(SPLITS_CSV):
+if not SPLITS_CSV.exists():
     st.warning(f"Não achei {SPLITS_CSV}. Vou rodar sem as tags típicas (explicação semântica).")
 
 model = load_model()
@@ -268,7 +271,7 @@ MACROS = labels["macro_names"]
 STYLES = labels["style_names"]
 
 macro_tags, style_tags = ({}, {})
-if os.path.exists(SPLITS_CSV):
+if SPLITS_CSV.exists():
     macro_tags, style_tags = load_tag_stats()
 
 file = st.file_uploader("📸 Envie uma imagem", type=["jpg", "jpeg", "png"])
